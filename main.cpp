@@ -63,15 +63,17 @@ public:
     public:
         iterator()                                                      {}
         iterator(typename std::vector<node>::iterator itVec, typename node::iterator itFL, HashTable ht)
-            : basket(ht.table()), mLink(&*itFL), it1(itVec), it2(itFL), size(ht.Size()), index (0)  {}
+            : basket(ht.table()), mLink(&*itFL), it1(itVec), it2(itFL), size(ht.Size()), index(0)  {}
 
         bool operator==(iterator const& other)   const {return mLink->mKey == other.mLink->mKey;}
         bool operator!=(iterator const& other)   const {return mLink != other.mLink && index < size;}
         typename iterator::reference operator*() const {return *mLink;}
         iterator& operator++()
         {
+			++index;
             if (++it2 == (*it1).end())
             {
+				if (index < size)
                 // функия поиска следующего узла
                 while (1)
                 {
@@ -81,7 +83,6 @@ public:
                 it2 = (*it1).begin();
             }
 
-            ++index;
             mLink = &*it2;
 
             return *this;
@@ -173,11 +174,11 @@ int main(int argc, char *argv[])
 //    ht1.erase("ocean");
 //    ht1.erase("sad");
 
-    std::cout << ht1["rome"]     << " "
+/*    std::cout << ht1["rome"]     << " "
               << ht1["Venom"]    << " "
               << ht1["ocean"]    << " "
               << ht1["A$AP"]     << std::endl;
-
+			  */
     HashTable<double, double> ht2;
     ht2.insert(3.14, 1.0);      // [5]
     ht2.insert(58.3,2.0);       // [3]
@@ -203,6 +204,6 @@ int main(int argc, char *argv[])
 
     for (std::pair<double, double> l : ht2)
         std::cout << l.first << " " << l.second << std::endl;
-
+	
     return 0;
 }
