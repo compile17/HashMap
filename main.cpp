@@ -1,105 +1,101 @@
+#include <unordered_map>
 #include <iostream>
 #include <forward_list>
 #include <vector>
 
-template<typename Key,typename Val>
-struct LinkedHashEntry {
-    LinkedHashEntry(const Key& key, const Val& val, size_t hash)
-        : mKey(key), mHash(hash), mValue(val)                   {}
-
-    const Key       mKey;
-    const size_t      mHash;
-    Val             mValue;
-};
-
 template <typename Key,typename Val>
 class HashTable
 {
-    using Link = LinkedHashEntry<Key, Val> ;
+    using node = std::forward_list<std::pair<Key, Val>>;
 
-    unsigned hash(const Key &id)       {std::hash<Key> hash_fn; return hash_fn(id)%17;}
+    static unsigned hash(const Key &id)         {std::hash<Key> hash_fn; return hash_fn(id)%17;}
+    std::vector<node>& table()                  {return mLinks;}
 
-    std::vector<std::forward_list<Link*>> mLinks;
+    std::vector<node> mLinks;
+    int size;
 public:
-    HashTable() {mLinks.resize(17);}
+    HashTable() {mLinks.resize(17), size = 0;}
 
     void insert(const Key& key, const Val& val);
     void erase(const Key& key);
     Val operator[](const Key& key);
 
-    std::vector<std::forward_list<Link*>> table() {return mLinks;}
+    int Size() {return size;}
 
     class iterator;
     iterator begin()
     {
-        for (size_t i = 0; i < mLinks.size(); ++i)
-            if (!mLinks[i].empty())
-                return iterator(mLinks[i].front(), *this);
-        return iterator(nullptr, *this);
+        auto firstList = mLinks.begin();
+        auto firstPair = mLinks[0].begin();
+        for (; firstList != mLinks.end(); ++firstList)
+            if (!(*firstList).empty())
+            {
+                firstPair = (*firstList).begin();
+                break;
+            }
+
+        return iterator(firstList, firstPair, *this);
     }
 
     iterator end()
     {
-        Link *buf = nullptr;
-        for (size_t i = 0; i < mLinks.size(); ++i)
-            if (!mLinks[i].empty())
-//                buf = *(mLinks[i].end());
-                for (auto& j : mLinks[i])
-                    buf = j;
-        return iterator(buf, *this);
+        auto firstList = --mLinks.end();
+        auto firstPair = mLinks[0].begin();
+        for (; firstList != mLinks.begin(); --firstList)
+            if (!(*firstList).empty())
+            {
+                firstPair = (*firstList).end();
+                break;
+            }
+
+        return iterator(firstList, firstPair, *this);
     }
 
-
-    class iterator: public std::iterator<std::forward_iterator_tag, Link>
+    class iterator: public std::iterator<std::forward_iterator_tag, std::pair<Key, Val>>
     {
+        std::vector<node> basket;
+        std::pair<Key, Val> *mLink;
+        typename std::vector<node>::iterator it1;
+        typename node::iterator it2;
+        int size;
+        int index;
+
     public:
-        iterator(Link *link, HashTable ht)  : basket(ht.table()), mLink(link), index(0), right(-1)    {notZero();}
-        iterator(const iterator &it)        : mLink(it.mLink)                                         {}
+        iterator()                                                      {}
+        iterator(typename std::vector<node>::iterator itVec, typename node::iterator itFL, HashTable ht)
+            : basket(ht.table()), mLink(&*itFL), it1(itVec), it2(itFL), size(ht.Size()), index (0)  {}
 
         bool operator==(iterator const& other)   const {return mLink->mKey == other.mLink->mKey;}
-        bool operator!=(iterator const& other)   const {return mLink->mKey != other.mLink->mKey;}
+        bool operator!=(iterator const& other)   const {return mLink != other.mLink && index < size;}
         typename iterator::reference operator*() const {return *mLink;}
         iterator& operator++()
         {
-            it2 = basket[right].begin();
-            std::advance(it2,index);
-            if (++it2 == basket[right].end())
+            if (++it2 == (*it1).end())
             {
-                notZero();
-                it2 = basket[right].begin();
-                index = 0;
+                // функия поиска следующего узла
+                while (1)
+                {
+                    ++it1;
+                    if (!(*it1).empty()) break;
+                }
+                it2 = (*it1).begin();
             }
-            else index++;
 
-            mLink = *it2;
+            ++index;
+            mLink = &*it2;
 
             return *this;
         }
-    private:
-        void notZero()
-        {
-            for (int i = right+1; i < basket.size();++i)
-                if (!basket[i].empty())
-                {
-                    right = i;
-                    break;
-                }
-        }
-
-        std::vector<std::forward_list<Link*>> basket;
-        Link* mLink;
-        size_t index; // индекс текущего положения в vector
-        int right; // индекс текущего элемента в списке
-        typename std::forward_list<Link*>::iterator it2;
     };
 };
 
 template<typename Key, typename Val>
 void HashTable<Key, Val>::insert(const Key &key, const Val &val)
 {
-    Link *subLink = new Link(key, val, hash(key));
-    size_t place = subLink->mHash;
-    mLinks[place].push_front(subLink);
+    size_t place = HashTable::hash(key);
+    std::pair<Key, Val> pair(key, val);
+    mLinks[place].push_front(pair);
+    ++size;
 }
 
 template<typename Key, typename Val>
@@ -114,12 +110,13 @@ void HashTable<Key, Val>::erase(const Key &key)
         while(begin != mLinks[place].end())
         {
             auto s = *begin;
-            if(s->mKey == key) break;
+            if(s.first == key) break;
 
             ++begin;
             ++prev;
         }
 
+        --size;
         mLinks[place].erase_after(prev);
     }
 }
@@ -128,13 +125,13 @@ template<typename Key, typename Val>
 Val HashTable<Key, Val>::operator[](const Key &key)
 {
     size_t place = hash(key);
-    for (const Link* l : mLinks[place])
-        if (l->mKey == key)
-            return l->mValue;
+    for (std::pair<Key, Val> p : mLinks[place])
+        if (p.first == key)
+            return p.second;
     return Val();
 }
 
-int main()
+int main(int argc, char *argv[])
 {
     HashTable<int, int> hT;
     hT.insert(17, 17);
@@ -147,9 +144,9 @@ int main()
     hT.insert(18, 35);
     hT.insert(35, 52);
 
-//        hT.erase(17);
-    //    hT.erase(22);
-    //    hT.erase(35);
+//    hT.erase(17);
+//    hT.erase(22);
+//    hT.erase(35);
 
     std::cout << hT[17] << " "
               << hT[22] << " "
@@ -171,10 +168,10 @@ int main()
     ht1.insert("Holland", "Tom");    // [14]
     ht1.insert("Venom", "Carnage");  // [8]
 
-    //    ht1.erase("rome");
-    //    ht1.erase("Venom");
-    //    ht1.erase("ocean");
-    //    ht1.erase("sad");
+//    ht1.erase("rome");
+//    ht1.erase("Venom");
+//    ht1.erase("ocean");
+//    ht1.erase("sad");
 
     std::cout << ht1["rome"]     << " "
               << ht1["Venom"]    << " "
@@ -192,10 +189,9 @@ int main()
     ht2.insert(2.21,8.0);       // [5]
     ht2.insert(35.17,9.0);      // [10]
 
-    ht2.erase(2.21);
-    ht2.erase(36.5);
-    ht2.erase(35.17);
-
+//    ht2.erase(2.21);
+//    ht2.erase(36.5);
+//    ht2.erase(35.17);
 
     std::cout << ht2[35.17] << " "
               << ht2[49.2]  << " "
@@ -205,8 +201,8 @@ int main()
               << ht2[2.21]  << " "
               << ht2[35.17] << std::endl;
 
-    for (LinkedHashEntry<double, double> l : ht2)
-        std::cout << l.mValue << " ";
+    for (std::pair<double, double> l : ht2)
+        std::cout << l.first << " " << l.second << std::endl;
 
     return 0;
 }
